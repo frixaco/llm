@@ -1,0 +1,15 @@
+diff --git a/apps/api/package.json b/apps/api/package.json
+index a83809c..185d15b 100644
+--- a/apps/api/package.json
++++ b/apps/api/package.json
+@@ -2,7 +2,9 @@
+   "name": "api",
+   "type": "module",
+   "scripts": {
+-    "dev": "bun run --hot src/index.ts"
++    "dev": "bun run --hot src/index.ts",
++    "migrate": "drizzle-kit migrate",
++    "push": "drizzle-kit push"
+   },
+   "dependencies": {
+     "@libsql/client": "^0.14.0",
