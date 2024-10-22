@@ -4,3 +4,4 @@
 - [ ] `llm keys <openai, anthropic, groq> <key>` updates API key if `<key>` provided, otherwise print out its value
 - [ ] `llm "<prompt>"` runs `<prompt>` and return the response
 - [ ] `llm -s <system prompt> "<prompt>"` sets system prompt - `<system prompt>`, then runs the `<prompt>`
+- [ ] `llm commit -p <prompt>` uses `<prompt>` as instruction to how to formulate commit message, then runs `git commit` with the commit message generated
