@@ -1,14 +1,27 @@
-import React from 'react';
-import {Text} from 'ink';
+import React, {useState} from 'react';
+import {Box, useApp, useInput} from 'ink';
+import TextInput from 'ink-text-input';
 
-type Props = {
-	name: string | undefined;
-};
+export default function App() {
+	const {exit} = useApp();
+	const [query, setQuery] = useState('');
 
-export default function App({name = 'Stranger'}: Props) {
+	useInput((input, key) => {
+		if (input === 'q') {
+			exit();
+		}
+
+		if (key.shift && key.return) {
+			console.log('new line');
+			setQuery(p => p + '\r\n');
+		}
+	});
+
+	console.log(query);
+
 	return (
-		<Text>
-			Hello, <Text color="green">{name}</Text>
-		</Text>
+		<Box marginRight={1} borderStyle="single" paddingX={1}>
+			<TextInput value={query} onChange={setQuery} />
+		</Box>
 	);
 }
