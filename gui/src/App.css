@@ -114,3 +114,15 @@ button {
     background-color: #0f0f0f69;
   }
 }
+
+.dirs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.dir {
+  border: 1px solid white;
+  padding: 0px 12px;
+  border-radius: 12px;
+}
