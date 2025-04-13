@@ -1,123 +1,124 @@
 package main
 
 import (
-	"context"
+	"fmt"
+	"os"
+	"strings"
 
-	"github.com/openai/openai-go"
+	"github.com/charmbracelet/bubbles/v2/cursor"
+	"github.com/charmbracelet/bubbles/v2/textarea"
+	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss/v2"
 )
 
 func main() {
-	client := openai.NewClient()
-	ctx := context.Background()
-
-	sysprompt := "Share only a brief description of the place in 50 words. Then immediately make some tool calls and announce them."
-
-	question := "Tell me about Greece's largest city."
-
-	messages := []openai.ChatCompletionMessageParamUnion{
-		openai.SystemMessage(sysprompt),
-		openai.UserMessage(question),
-	}
-
-	print("> ")
-	println(question)
-	println()
-
-	params := openai.ChatCompletionNewParams{
-		Messages: messages,
-		Seed:     openai.Int(0),
-		Model:    openai.ChatModelGPT4o,
-		Tools:    tools,
-	}
-
-	stream := client.Chat.Completions.NewStreaming(ctx, params)
-	acc := openai.ChatCompletionAccumulator{}
-
-	for stream.Next() {
-		chunk := stream.Current()
-
-		acc.AddChunk(chunk)
-
-		// When this fires, the current chunk value will not contain content data
-		if _, ok := acc.JustFinishedContent(); ok {
-			println()
-			println("finish-event: Content stream finished")
-		}
-
-		if refusal, ok := acc.JustFinishedRefusal(); ok {
-			println()
-			println("finish-event: refusal stream finished:", refusal)
-			println()
-		}
-
-		if tool, ok := acc.JustFinishedToolCall(); ok {
-			println("finish-event: tool call stream finished:", tool.Index, tool.Name, tool.Arguments)
-		}
-
-		// It's best to use chunks after handling JustFinished events.
-		// Here we print the delta of the content, if it exists.
-		if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-			print(chunk.Choices[0].Delta.Content)
-		}
-	}
-
-	if err := stream.Err(); err != nil {
-		panic(err)
-	}
-
-	if acc.Usage.TotalTokens > 0 {
-		println("Total Tokens:", acc.Usage.TotalTokens)
+	p := tea.NewProgram(initialModel(), tea.WithKeyboardEnhancements(
+		tea.WithKeyReleases,
+		tea.WithUniformKeyLayout,
+	))
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Oof: %v\n", err)
 	}
 }
 
-var tools = []openai.ChatCompletionToolParam{
-	{
-		Function: openai.FunctionDefinitionParam{
-			Name:        "get_live_weather",
-			Description: openai.String("Get weather at the given location"),
-			Parameters: openai.FunctionParameters{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"location": map[string]string{
-						"type": "string",
-					},
-				},
-				"required": []string{"location"},
-			},
-		},
-	},
-	{
-		Function: openai.FunctionDefinitionParam{
-			Name:        "get_population",
-			Description: openai.String("Get population of a given town"),
-			Parameters: openai.FunctionParameters{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"town": map[string]string{
-						"type": "string",
-					},
-					"nation": map[string]string{
-						"type": "string",
-					},
-					"rounding": map[string]string{
-						"type":        "integer",
-						"description": "Nearest base 10 to round to, e.g. 1000 or 1000000",
-					},
-				},
-				"required": []string{"town", "nation"},
-			},
-		},
-	},
+type model struct {
+	messages    []string
+	textarea    textarea.Model
+	statusStyle lipgloss.Style
+	statusBar   status
+	err         error
 }
 
-// Mock function to simulate weather data retrieval
-func getWeather(location string) string {
-	// In a real implementation, this function would call a weather API
-	return "Sunny, 25°C"
+type status struct {
+	tokens int
+	cost   float64
 }
 
-// Mock function to simulate population data retrieval
-func getPopulation(town, nation string, rounding int) string {
-	// In a real implementation, this function would call a population API
-	return "Athens, Greece: 664,046"
+func initialModel() model {
+	ta := textarea.New()
+	ta.Placeholder = "Send a message..."
+	ta.VirtualCursor = true
+	ta.Focus()
+
+	ta.Prompt = ""
+	ta.SetWidth(30)
+	ta.MaxHeight = 10
+	ta.SetHeight(1)
+
+	ta.Styles.Focused.CursorLine = lipgloss.NewStyle()
+	ta.Styles.Focused.Prompt = lipgloss.NewStyle().Foreground(lipgloss.Color("#b4befe"))
+	ta.Styles.Focused.Base = lipgloss.NewStyle().Border(lipgloss.RoundedBorder(), true).BorderForeground(lipgloss.Color("#cba6f7"))
+	ta.Styles.Blurred.Base = lipgloss.NewStyle().Border(lipgloss.RoundedBorder(), true).BorderForeground(lipgloss.Color("#7f849c"))
+
+	ta.ShowLineNumbers = false
+
+	ta.KeyMap.InsertNewline.SetEnabled(false)
+
+	return model{
+		textarea:    ta,
+		messages:    []string{},
+		statusStyle: lipgloss.NewStyle().Align(lipgloss.Right).Padding(0, 1),
+		err:         nil,
+	}
+}
+
+func (m model) Init() tea.Cmd {
+	return textarea.Blink
+}
+
+func (m *model) updateTextareaHeight() {
+	content := m.textarea.Value()
+	lines := strings.Count(content, "\n") + 1
+	if content == "" {
+		lines = 1
+	}
+	newHeight := min(lines, m.textarea.MaxHeight)
+	m.textarea.SetHeight(newHeight)
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.textarea.SetWidth(msg.Width)
+		m.updateTextareaHeight()
+
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "esc":
+		case "ctrl+c":
+			return m, tea.Quit
+		case "enter":
+			m.messages = append(m.messages, m.textarea.Value())
+			m.textarea.Reset()
+			m.textarea.SetHeight(1) // Reset to 1 line
+			return m, nil
+		case "shift+enter":
+			m.textarea.InsertString("\n")
+			m.updateTextareaHeight()
+			m.textarea, cmd = m.textarea.Update(msg)
+			return m, cmd
+		default:
+			m.textarea, cmd = m.textarea.Update(msg)
+			m.updateTextareaHeight()
+			return m, cmd
+		}
+
+	case cursor.BlinkMsg:
+		m.textarea, cmd = m.textarea.Update(msg)
+		m.updateTextareaHeight()
+		return m, cmd
+	}
+
+	return m, nil
+}
+
+func (m model) View() string {
+	statusView := m.statusStyle.Width(m.textarea.Width() + 2).Render(fmt.Sprintf("tokens: %7d\ncost: %9.2f", m.statusBar.tokens, m.statusBar.cost))
+	return fmt.Sprintf(
+		"%s\n%s",
+		statusView,
+		m.textarea.View(),
+	)
 }
