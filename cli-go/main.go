@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/cursor"
+	"github.com/charmbracelet/bubbles/v2/spinner"
 	"github.com/charmbracelet/bubbles/v2/textarea"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
@@ -25,20 +27,34 @@ func main() {
 	}
 }
 
-type model struct {
+type State int
+
+const (
+	Idle State = iota
+	WaitingInitialLLMRes
+	LLMRequestedTool
+	ToolRunning
+	SendingToolResult
+	WaitingLLM
+)
+
+type Model struct {
 	textarea    textarea.Model
 	statusStyle lipgloss.Style
-	statusBar   status
+	statusBar   Status
 	response    string
 	err         error
+	spinner     spinner.Model
+
+	state State
 }
 
-type status struct {
+type Status struct {
 	tokens int
 	cost   float64
 }
 
-func initialModel() model {
+func initialModel() Model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
 	ta.VirtualCursor = true
@@ -58,20 +74,26 @@ func initialModel() model {
 
 	ta.KeyMap.InsertNewline.SetEnabled(false)
 
-	return model{
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	return Model{
 		textarea:    ta,
 		statusStyle: lipgloss.NewStyle().Align(lipgloss.Right).Padding(0, 1).Foreground(lipgloss.Color("#b4befe")),
-		statusBar:   status{tokens: 1000, cost: 0.01},
+		statusBar:   Status{tokens: 1000, cost: 0.01},
 		response:    "",
 		err:         nil,
+		generating:  false,
+		spinner:     s,
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return textarea.Blink
 }
 
-func (m *model) updateTextareaHeight() {
+func (m *Model) updateTextareaHeight() {
 	content := m.textarea.Value()
 	lines := strings.Count(content, "\n") + 1
 	if content == "" {
@@ -81,14 +103,24 @@ func (m *model) updateTextareaHeight() {
 	m.textarea.SetHeight(newHeight)
 }
 
+func editFile(path string, searchBlock string, replaceBlock string, expectedReplacements int) {
+
+}
+
 func processPrompt(prompt string) tea.Cmd {
 	return func() tea.Msg {
 		openrouterUrl := "https://openrouter.ai/api/v1/chat/completions"
 
 		client := &http.Client{}
 
-		p := openrouterPayload{Model: "google/gemini-2.5-pro-preview-03-25", Messages: []openrouterPayloadMessage{
-			{Role: "user", Content: prompt},
+		p := ORPayload{Model: "google/gemini-2.5-pro-preview-03-25", Messages: []ORMessage{
+			{
+
+				Role: "system", Content: "You are an assistant at Senior Software Engineer level",
+			},
+			{
+				Role: "user", Content: prompt,
+			},
 		}}
 
 		payload, err := json.Marshal(p)
@@ -110,10 +142,11 @@ func processPrompt(prompt string) tea.Cmd {
 		defer res.Body.Close()
 
 		if res.StatusCode != 200 {
-			log.Fatal("Wrong response shape")
+			b, _ := io.ReadAll(res.Body)
+			log.Fatal("Wrong response shape", string(b))
 		}
 
-		var response openrouterResponse
+		var response ORResponse
 		if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
 			log.Fatal(err)
 		}
@@ -122,29 +155,10 @@ func processPrompt(prompt string) tea.Cmd {
 	}
 }
 
-type responseMsg openrouterResponse
+type responseMsg ORResponse
 
-type openrouterPayload struct {
-	Model    string                     `json:"model"`
-	Messages []openrouterPayloadMessage `json:"messages"`
-}
-
-type openrouterPayloadMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type openrouterResponse struct {
-	Id      string                     `json:"id"`
-	Choices []openrouterResponseChoice `json:"choices"`
-}
-
-type openrouterResponseChoice struct {
-	Message openrouterPayloadMessage `json:"message"`
-}
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -153,7 +167,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case responseMsg:
 		m.response = msg.Choices[0].Message.Content
+		m.generating = false
 		return m, nil
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		if !m.generating {
+			return m, nil
+		}
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -164,29 +187,51 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			prompt := m.textarea.Value()
 			m.textarea.Reset()
 			m.textarea.SetHeight(1)
-			return m, processPrompt(prompt)
+			m.generating = true
+			cmds = append(cmds, processPrompt(prompt), m.spinner.Tick)
+			return m, tea.Batch(cmds...)
 		case "shift+enter":
 			m.textarea.InsertString("\n")
 			m.updateTextareaHeight()
+			var cmd tea.Cmd
 			m.textarea, cmd = m.textarea.Update(msg)
-			return m, cmd
+			cmds = append(cmds, cmd)
+			return m, tea.Batch(cmds...)
 		default:
+			var cmd tea.Cmd
 			m.textarea, cmd = m.textarea.Update(msg)
+			cmds = append(cmds, cmd)
+			m.spinner, cmd = m.spinner.Update(msg)
+			cmds = append(cmds, cmd)
 			m.updateTextareaHeight()
-			return m, cmd
+			return m, tea.Batch(cmds...)
 		}
 
 	case cursor.BlinkMsg:
+		var cmd tea.Cmd
 		m.textarea, cmd = m.textarea.Update(msg)
+		m.spinner, cmd = m.spinner.Update(msg)
+		cmds = append(cmds, cmd)
 		m.updateTextareaHeight()
-		return m, cmd
+		return m, tea.Batch(cmds...)
 	}
 
 	return m, nil
 }
 
-func (m model) View() string {
+func (m Model) View() string {
 	statusView := m.statusStyle.Width(m.textarea.Width() + 2).Render(fmt.Sprintf("tokens: %7d\ncost: %9.2f", m.statusBar.tokens, m.statusBar.cost))
+
+	if m.generating {
+		return fmt.Sprintf(
+			"%s\n%s\n%s\n%s",
+			m.spinner.View(),
+			m.response,
+			statusView,
+			m.textarea.View(),
+		)
+	}
+
 	return fmt.Sprintf(
 		"%s\n%s\n%s",
 		m.response,
