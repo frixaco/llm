@@ -41,6 +41,7 @@ body {
   padding: 10px;
   height: calc(100vh - 30px);
   overflow: auto;
+  color: #cdd6f4;
 }
 
 .codeblock {
