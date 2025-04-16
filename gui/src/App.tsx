@@ -1,56 +1,46 @@
-import { useEffect, useState } from "react";
+import { createEffect, createSignal } from "solid-js";
 import "./App.css";
 
-import { readDir, BaseDirectory, DirEntry } from "@tauri-apps/plugin-fs";
-import { join } from "@tauri-apps/api/path";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import { CodeBlock } from "./components/codeblock";
+import { exit } from '@tauri-apps/plugin-process';
+
+const file = "D:/dev/llm/cli-go/cli.go"
+
 
 function App() {
-  const [failure, setError] = useState("");
-  const [dirs, setDirs] = useState<string[]>([]);
+  const [code, setCode] = createSignal("");
+  const [prompt, setPrompt] = createSignal("")
 
-  useEffect(() => {
-    async function processEntriesRecursively(
-      parent: string,
-      entries: DirEntry[],
-    ) {
-      for (const entry of entries) {
-        if (entry.isDirectory) {
-          setDirs((p) => [...p, entry.name]);
-          const dir = await join(parent, entry.name);
-          processEntriesRecursively(
-            dir,
-            await readDir(dir, { baseDir: BaseDirectory.Home }),
-          );
-        }
+  const onClick = async () => {
+    console.log("onClick")
+    const content = await readTextFile(file)
+    setCode(content)
+  }
+
+  createEffect(() => {
+    const evl = async (e: KeyboardEvent) => {
+      if (e.key === "Q" && e.shiftKey === true && e.target!.tagName === "BODY") {
+        await exit(1)
       }
     }
 
-    const check = async () => {
-      try {
-        const dir = "personal";
-        const entries = await readDir(dir, {
-          baseDir: BaseDirectory.Home,
-        });
+    document.addEventListener("keypress", evl)
 
-        processEntriesRecursively(dir, entries);
-      } catch (err) {
-        setError(String(err));
-      }
-    };
-    check();
-  }, []);
+    return () => {
+      document.removeEventListener("keypress", evl)
+    }
+  })
 
   return (
-    <main className="container">
-      <div className="dirs">
-        {dirs.map((d, i) => (
-          <div className="dir">
-            <p key={`${d}_${i}`}>{d}</p>
-          </div>
-        ))}
-      </div>
+    <main class="container">
+      <button onClick={onClick}>READ FILE</button>
+      <CodeBlock code={code()} />
 
-      <p>{failure}</p>
+      <input onInput={(e) => setPrompt(e.currentTarget.value)} />
+
+
+      <p>{prompt()}</p>
     </main>
   );
 }

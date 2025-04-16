@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "fs:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "**/**" }],
+      "deny": [
+        { "path": "**/node_modules/**" },
+        { "path": "**/dist/**" },
+        { "path": "**/.next/**" },
+        { "path": "**/.git/**" },
+        { "path": "**/.venv/**" },
+        { "path": "**/target/**" }
+      ]
+    }
+  ]
+}
+
