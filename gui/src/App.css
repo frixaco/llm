@@ -1,50 +1,97 @@
-* {
-  margin: 0;
+@import "tailwindcss";
+
+@theme {
+  --color-rosewater: #f5e0dc;
+  --color-flamingo: #f2cdcd;
+  --color-pink: #f5c2e7;
+  --color-mauve: #cba6f7;
+  --color-red: #f38ba8;
+  --color-maroon: #eba0ac;
+  --color-peach: #fab387;
+  --color-yellow: #f9e2af;
+  --color-green: #a6e3a1;
+  --color-teal: #94e2d5;
+  --color-sky: #89dceb;
+  --color-sapphire: #74c7ec;
+  --color-blue: #89b4fa;
+  --color-lavender: #b4befe;
+  --color-text: #cdd6f4;
+  --color-subtext-1: #bac2de;
+  --color-subtext-0: #a6adc8;
+  --color-overlay-2: #9399b2;
+  --color-overlay-1: #7f849c;
+  --color-overlay-0: #6c7086;
+  --color-surface-2: #585b70;
+  --color-surface-1: #45475a;
+  --color-surface-0: #313244;
+  --color-base: #1e1e2e;
+  --color-mantle: #181825;
+  --color-crust: #11111b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
   padding: 0;
-  box-sizing: border-box;
+  margin: 0;
+}
+
+* {
   min-width: 0;
 }
 
-ol,
-ul {
-  list-style: none;
-}
-
-a {
-  text-decoration: none;
-}
-
-img {
-  max-width: 100%;
-  height: auto;
-}
-
-body {
-  height: 100vh;
-  overflow: hidden;
-  line-height: 1;
-  background-color: #1e1e2e;
-}
-
-.titlebar {
-  height: 30px;
-  user-select: none;
-  display: flex;
-  justify-content: flex-end;
-  position: fixed;
-  width: 100%;
-  top: 0;
-}
-
-.container {
-  margin-top: 30px;
-  padding: 10px;
-  height: calc(100vh - 30px);
-  overflow: auto;
-  color: #cdd6f4;
-}
-
-.codeblock {
-  overflow: scroll;
-  height: 300px;
-}
+/* * { */
+/*   margin: 0; */
+/*   padding: 0; */
+/*   box-sizing: border-box; */
+/*   min-width: 0; */
+/* } */
+/**/
+/* ol, */
+/* ul { */
+/*   list-style: none; */
+/* } */
+/**/
+/* a { */
+/*   text-decoration: none; */
+/* } */
+/**/
+/* img { */
+/*   max-width: 100%; */
+/*   height: auto; */
+/* } */
+/**/
+/* body { */
+/*   height: 100vh; */
+/*   overflow: hidden; */
+/*   line-height: 1; */
+/*   background-color: #1e1e2e; */
+/* } */
+/**/
+/* .titlebar { */
+/*   height: 30px; */
+/*   user-select: none; */
+/*   display: flex; */
+/*   justify-content: flex-end; */
+/*   position: fixed; */
+/*   width: 100%; */
+/*   top: 0; */
+/* } */
+/**/
+/* .container { */
+/*   margin-top: 30px; */
+/*   padding: 10px; */
+/*   height: calc(100vh - 30px); */
+/*   overflow: auto; */
+/*   color: #cdd6f4; */
+/* } */
+/**/
+/* .codeblock { */
+/*   overflow: scroll; */
+/*   height: 300px; */
+/* } */
+/**/
+/* .prompt-input { */
+/*   text */
+/* } */
