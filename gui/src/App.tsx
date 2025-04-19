@@ -1,10 +1,11 @@
-import { createEffect, createSignal, For, onMount } from "solid-js";
+import { createEffect, createSignal, For, onMount, Show } from "solid-js";
 import "./App.css";
 
 import { readTextFile, readDir, BaseDirectory } from "@tauri-apps/plugin-fs";
 import { CodeBlock } from "./components/codeblock";
 import { exit } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
+import { Loader } from "./components/spinner";
 
 // const file = "D:/dev/llm/cli-go/cli.go";
 
@@ -50,39 +51,48 @@ function App() {
     };
   });
 
+  const onSend = async (e: KeyboardEvent) => {
+    if (e.key === "Enter" && e.metaKey && prompt().trim() !== "") {
+      const userPrompt = prompt();
+      updateHistory((p) => [...p, userPrompt]);
+      setGenerating(true);
+      setPrompt("");
+      const response: string = await invoke("call_llm", {
+        prompt: userPrompt,
+      });
+
+      updateHistory((p) => [...p, response]);
+      setGenerating(false);
+    }
+  };
+
   return (
-    <main class="flex flex-col h-full p-2">
-      <div data-tauri-drag-region class="h-7 select-none fixed top-0 w-full" />
+    <main class="flex flex-col h-full p-2 gap-1">
+      <div data-tauri-drag-region class="h-7 select-none" />
 
-      <div class="h-6"></div>
-
-      <div class="flex-1">
-        <For each={history()} fallback={<div>No items...</div>}>
+      <div class="flex-1 overflow-auto text-text">
+        <For
+          each={history()}
+          fallback={<div class="text-subtext-0 text-xl">LET'S START</div>}
+        >
           {(item, index) => (
-            <div data-index={index()} class="border border-surface-0">
-              <p class="text-text">{item}</p>
+            <div data-index={index()} class="border border-surface-0 px-2 py-1">
+              <p class="">{item}</p>
               {/* <CodeBlock code={code()} /> */}
             </div>
           )}
         </For>
+
+        <Show when={generating()}>
+          <Loader width={30} height={25} />
+        </Show>
       </div>
 
       <textarea
-        onKeyPress={async (e) => {
-          if (e.key === "Enter" && e.metaKey && prompt().trim() !== "") {
-            setGenerating(true);
-            const response: string = await invoke("call_llm", {
-              prompt: prompt(),
-            });
-
-            setPrompt("");
-            updateHistory((p) => [...p, response]);
-            setGenerating(false);
-          }
-        }}
+        onKeyPress={onSend}
         ref={promptInputRef}
         value={prompt()}
-        class="resize-y min-h-[2.125rem] h-[2.125rem] max-h-24 w-full border border-surface-2 px-2 py-1 outline-none text-subtext-0"
+        class="focus:border-subtext-1 resize-y min-h-[2.125rem] h-[2.125rem] max-h-24 w-full border border-surface-2 px-2 py-1 outline-none text-subtext-0"
         onInput={(e) => setPrompt(e.currentTarget.value)}
       />
     </main>
