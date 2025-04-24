@@ -64,6 +64,19 @@ function App() {
       updateHistory((p) => [...p, response]);
       setGenerating(false);
     }
+
+    if (e.key === "Enter" && e.ctrlKey && prompt().trim() !== "") {
+      const userPrompt = prompt();
+      updateHistory((p) => [...p, userPrompt]);
+      setGenerating(true);
+      setPrompt("");
+      const response: string = await invoke("call_llm", {
+        prompt: userPrompt,
+      });
+
+      updateHistory((p) => [...p, response]);
+      setGenerating(false);
+    }
   };
 
   return (
