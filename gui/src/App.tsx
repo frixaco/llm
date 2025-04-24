@@ -6,6 +6,8 @@ import { CodeBlock } from "./components/codeblock";
 import { exit } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 import { Loader } from "./components/spinner";
+// import markdownit from 'markdown-it'
+import { marked } from "marked";
 
 // const file = "D:/dev/llm/cli-go/cli.go";
 
@@ -52,6 +54,7 @@ function App() {
   });
 
   const onSend = async (e: KeyboardEvent) => {
+    console.log(prompt());
     if (e.key === "Enter" && e.metaKey && prompt().trim() !== "") {
       const userPrompt = prompt();
       updateHistory((p) => [...p, userPrompt]);
@@ -61,7 +64,9 @@ function App() {
         prompt: userPrompt,
       });
 
-      updateHistory((p) => [...p, response]);
+      const markdownResponse = await marked.parse(response);
+
+      updateHistory((p) => [...p, markdownResponse]);
       setGenerating(false);
     }
 
@@ -73,11 +78,16 @@ function App() {
       const response: string = await invoke("call_llm", {
         prompt: userPrompt,
       });
+      console.log("response", response);
 
-      updateHistory((p) => [...p, response]);
+      const markdownResponse = await marked.parse(response);
+
+      updateHistory((p) => [...p, markdownResponse]);
       setGenerating(false);
     }
   };
+
+  // TODO: maybe clipboard should appear in floating box above textarea?
 
   return (
     <main class="flex flex-col h-full p-2 gap-1">
@@ -90,7 +100,7 @@ function App() {
         >
           {(item, index) => (
             <div data-index={index()} class="border border-surface-0 px-2 py-1">
-              <p class="">{item}</p>
+              <div class="prose" innerHTML={item}></div>
               {/* <CodeBlock code={code()} /> */}
             </div>
           )}
@@ -102,10 +112,10 @@ function App() {
       </div>
 
       <textarea
-        onKeyPress={onSend}
+        onKeyDown={onSend}
         ref={promptInputRef}
         value={prompt()}
-        class="focus:border-subtext-1 resize-y min-h-[2.125rem] h-[2.125rem] max-h-24 w-full border border-surface-2 px-2 py-1 outline-none text-subtext-0"
+        class="focus:border-subtext-1 resize-y min-h-[2.125rem] h-24 max-h-24 w-full border border-surface-2 px-2 py-1 outline-none text-subtext-0"
         onInput={(e) => setPrompt(e.currentTarget.value)}
       />
     </main>

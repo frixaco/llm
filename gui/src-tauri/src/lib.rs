@@ -82,7 +82,9 @@ async fn call_llm(prompt: String) -> Result<String, String> {
     let user_prompt = json!({"role": "user", "content": prompt});
 
     let payload = json!({
-        "model" : "google/gemini-2.5-pro-preview-03-25",
+        // "model" : "google/gemini-2.5-pro-preview-03-25",
+        // "model": "openai/gpt-4.1-mini",
+        "model": "google/gemini-2.5-flash-preview",
         "messages": [system_prompt, user_prompt]
     });
 
