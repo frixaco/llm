@@ -119,7 +119,7 @@ async function runAgent(messages: CoreMessage[]): Promise<CoreMessage[]> {
 
   const result = streamText({
     toolCallStreaming: true,
-    maxSteps: 10,
+    maxSteps: 25,
     temperature: 0,
     // model: openrouter.chat("google/gemini-2.5-flash-preview"),
     // model: openrouter.chat("openai/gpt-4o-2024-11-20"),
@@ -143,18 +143,27 @@ async function runAgent(messages: CoreMessage[]): Promise<CoreMessage[]> {
           break;
 
         case "tool-call-streaming-start":
-          spinner = ora(`\nCalling ${chunk.toolName}`).start();
+          console.log(`\n- Calling ${chunk.toolName} tool...`);
           break;
 
         case "tool-call-delta":
-          if (spinner) spinner.text = `Tool running: ${chunk.toolName}`;
+          process.stdout.moveCursor(0, -1);
+          process.stdout.clearLine(1);
+          process.stdout.cursorTo(0);
+          process.stdout.write(`- ${chunk.toolName} tool is running...\n`);
           break;
 
         case "tool-result":
-          if (spinner) {
-            spinner.succeed(`${chunk.toolName} complete`);
-            spinner = null;
+          let message = `- ${chunk.toolName} tool finished running\n`;
+          if (chunk.result.status !== "success") {
+            message = `- ${chunk.toolName} tool failed to complete\n`;
           }
+
+          process.stdout.moveCursor(0, -1);
+          process.stdout.clearLine(1);
+          process.stdout.cursorTo(0);
+          process.stdout.write(message);
+
           break;
       }
     },
@@ -164,28 +173,29 @@ async function runAgent(messages: CoreMessage[]): Promise<CoreMessage[]> {
     onFinish: async ({ response }) => {
       const resultMessages = response.messages;
       messages.push(...resultMessages);
+      console.log();
     },
   });
 
   await result.consumeStream();
 
-  console.log();
-
   return messages;
 }
 
+const lineReader = createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+process.stdin.setRawMode(true);
+
+lineReader.on("SIGINT", () => {
+  console.log("Always ready to eat your tokens!");
+  lineReader.close();
+  process.exit(0);
+});
+
 async function main() {
-  const lineReader = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  lineReader.on("SIGINT", () => {
-    console.log("Always ready to eat your tokens!");
-    lineReader.close();
-    process.exit(0);
-  });
-
   const username = os.userInfo().username;
   console.log(chalk.green.bold(`Ready to help, ${username}!`));
 
@@ -193,10 +203,8 @@ async function main() {
     { role: "system", content: getSystemPrompt() },
   ];
 
-  let c = 0;
   while (true) {
-    const prompt = (await lineReader.question("> ")).trim();
-    console.log(`LOOP ${++c}`, prompt);
+    const prompt = (await lineReader.question(chalk.blue("> "))).trim();
     if (
       ["quit", "exit", "end", "/quit", "/exit"].includes(prompt.toLowerCase())
     ) {
@@ -207,6 +215,8 @@ async function main() {
       continue;
     }
 
+    process.stdin.pause();
+
     try {
       messages.push({
         role: "user",
@@ -214,13 +224,14 @@ async function main() {
       });
 
       messages = await runAgent(messages);
-      process.stdin.resume();
-    } catch (err) {
-      console.log(chalk.red(err));
+    } catch (error) {
+      console.log(chalk.red(error));
 
       messages = [{ role: "system", content: getSystemPrompt() }];
 
       console.log("Resetting conversation");
+    } finally {
+      process.stdin.resume();
     }
   }
 
