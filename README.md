@@ -8,6 +8,10 @@ Basically, worse version of "Claude Code", "Codex", "OpenCode" but it is mine!
 - [ ] Create reliable systems prompt, setup other important tools
 - [ ] Interactivity CLI
 
+### Demo
+
+[Watch Demo](./demo.mp4)
+
 ### Brainstorming
 
 **Saving tokens**:
