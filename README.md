@@ -5,7 +5,8 @@ Basically, worse version of "Claude Code", "Codex", "OpenCode" but it is mine!
 ### TODO
 
 - [ ] Implement basic "agentic loop" using Vercel AI SDK with file system tool
-- [ ] No idea
+- [ ] Create reliable systems prompt, setup other important tools
+- [ ] Interactivity CLI
 
 ### Brainstorming
 
