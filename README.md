@@ -10,7 +10,7 @@ Basically, worse version of "Claude Code", "Codex", "OpenCode" but it is mine!
 
 ### Demo
 
-[Watch Demo](./demo.mp4)
+https://github.com/user-attachments/assets/2e495400-4b43-41ce-8af8-ef19aa2ce661
 
 ### Brainstorming
 
