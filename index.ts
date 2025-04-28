@@ -1,4 +1,3 @@
-import ora, { type Ora } from "ora";
 import fs from "fs/promises";
 import { streamText, tool, type CoreMessage } from "ai";
 import { z } from "zod";
@@ -8,7 +7,8 @@ import os from "os";
 import chalk from "chalk";
 
 const getSystemPrompt =
-  () => `You are extremely smart coding assistant that follows exactly as user requested. Follow every rule exactly in the order given.
+  () => `You are extremely smart coding assistant with extensive knowledge in many programming languages, frameworks, design patterns and best practices.
+
 1. Always reply in two phases:
   • Phase 1 – Plan: start with the heading ## Plan and lay out a concise (≤ 5 bullets, ≤ 50 words total) action plan for solving the user's request.
   • Phase 2 – Execution: carry out the plan.
@@ -115,8 +115,6 @@ const openrouter = createOpenRouter({
 });
 
 async function runAgent(messages: CoreMessage[]): Promise<CoreMessage[]> {
-  let spinner: Ora | null = null;
-
   const result = streamText({
     toolCallStreaming: true,
     maxSteps: 25,
@@ -136,7 +134,7 @@ async function runAgent(messages: CoreMessage[]): Promise<CoreMessage[]> {
     onChunk: ({ chunk }) => {
       switch (chunk.type) {
         case "text-delta":
-          process.stdout.write(chunk.textDelta);
+          process.stdout.write(chalk.green(chunk.textDelta));
           break;
 
         case "tool-call":
@@ -150,7 +148,9 @@ async function runAgent(messages: CoreMessage[]): Promise<CoreMessage[]> {
           process.stdout.moveCursor(0, -1);
           process.stdout.clearLine(1);
           process.stdout.cursorTo(0);
-          process.stdout.write(`- ${chunk.toolName} tool is running...\n`);
+          process.stdout.write(
+            chalk.greenBright(`- ${chunk.toolName} tool is running...\n`),
+          );
           break;
 
         case "tool-result":
@@ -162,7 +162,7 @@ async function runAgent(messages: CoreMessage[]): Promise<CoreMessage[]> {
           process.stdout.moveCursor(0, -1);
           process.stdout.clearLine(1);
           process.stdout.cursorTo(0);
-          process.stdout.write(message);
+          process.stdout.write(chalk.greenBright(message));
 
           break;
       }
@@ -190,7 +190,7 @@ const lineReader = createInterface({
 process.stdin.setRawMode(true);
 
 lineReader.on("SIGINT", () => {
-  console.log("Always ready to eat your tokens!");
+  console.log(chalk.yellow("\nAlways ready to eat your tokens!"));
   lineReader.close();
   process.exit(0);
 });
