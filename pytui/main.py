@@ -1,69 +1,66 @@
+import json
 from time import monotonic
+from rich.syntax import Syntax
+from rich.table import Table
 
-from textual.app import App, ComposeResult
+from textual import events
+from textual.app import App, ComposeResult, RenderResult
 from textual.containers import HorizontalGroup, VerticalScroll
 from textual.reactive import reactive
-from textual.widgets import Button, Digits, Footer, Header
+from textual.widgets import Button, Digits, Footer, Header, Input, RichLog, TextArea
+
+CODE = '''\
+def loop_first_last(values: Iterable[T]) -> Iterable[tuple[bool, bool, T]]:
+    """Iterate and generate a tuple with a flag for first and last value."""
+    iter_values = iter(values)
+    try:
+        previous_value = next(iter_values)
+    except StopIteration:
+        return
+    first = True
+    for value in iter_values:
+        yield first, False, previous_value
+        first = False
+        previous_value = value
+    yield first, True, previous_value\
+'''
 
 
-class TimeDisplay(Digits):
-    """A widget to display elapsed time."""
+class Messages(RichLog):
+    """Message history"""
 
-    start_time = reactive(monotonic)
-    time = reactive(0.0)
+
+class PromptInput(TextArea):
+    """User prompt input area"""
 
     def on_mount(self) -> None:
-        """Event handler called when widget is added to the app."""
-        self.set_interval(1 / 60, self.update_time)
+        self.focus()
 
-    def update_time(self) -> None:
-        """Method to update the time to the current time."""
-        self.time = monotonic() - self.start_time
-
-    def watch_time(self, time: float) -> None:
-        """Called when the time attribute changes."""
-        minutes, seconds = divmod(time, 60)
-        hours, minutes = divmod(minutes, 60)
-        self.update(f"{hours:02,.0f}:{minutes:02.0f}:{seconds:05.2f}")
+    def on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            # TODO: submit
+            pass
+        # messages = self.app.query_one(Messages)
+        # messages.write(f"PromptInput key: {event.key!r}")
 
 
-class Stopwatch(HorizontalGroup):
-    """A stopwatch widget."""
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Event handler called when a button is pressed."""
-        if event.button.id == "start":
-            self.add_class("started")
-        elif event.button.id == "stop":
-            self.remove_class("started")
-
-    def compose(self) -> ComposeResult:
-        """Create child widgets of a stopwatch."""
-        yield Button("Start", id="start", variant="success")
-        yield Button("Stop", id="stop", variant="error")
-        yield Button("Reset", id="reset")
-        yield TimeDisplay()
-
-
-class StopwatchApp(App):
+class Aitetsu(App):
     """A Textual app to manage stopwatches."""
 
     CSS_PATH = "main.tcss"
-    BINDINGS = [("d", "toggle_dark", "Toggle dark mode")]
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
-        yield Header()
-        yield Footer()
-        yield VerticalScroll(Stopwatch(), Stopwatch(), Stopwatch())
+        yield VerticalScroll(Messages(id="messages", highlight=True, markup=True))
+        yield PromptInput(id="prompt", tab_behavior="indent", language="markdown")
 
-    def action_toggle_dark(self) -> None:
-        """An action to toggle dark mode."""
-        self.theme = (
-            "textual-dark" if self.theme == "textual-light" else "textual-light"
-        )
+    def on_ready(self) -> None:
+        """Called  when the DOM is ready."""
+        text_log = self.query_one(RichLog)
+
+        text_log.write(Syntax(CODE, "python", indent_guides=True))
 
 
 if __name__ == "__main__":
-    app = StopwatchApp()
+    app = Aitetsu()
     app.run()

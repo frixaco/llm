@@ -1,51 +1,13 @@
-Stopwatch {
-    background: $boost;
-    height: 5;
-    margin: 1;
-    min-width: 50;
-    padding: 1;
+Screen {
+	background: rgb(30, 30, 46);
 }
 
-TimeDisplay {   
-    text-align: center;
-    color: $foreground-muted;
-    height: 3;
+PromptInput {
+	background: rgb(30, 30, 46);
 }
 
-Button {
-    width: 16;
-}
-
-#start {
-    dock: left;
-}
-
-#stop {
-    dock: left;
-    display: none;
-}
-
-#reset {
-    dock: right;
-}
-
-.started {
-    background: $success-muted;
-    color: $text;
-}
-
-.started TimeDisplay {
-    color: $foreground;
-}
-
-.started #start {
-    display: none
-}
-
-.started #stop {
-    display: block
-}
-
-.started #reset {
-    visibility: hidden
+Messages {
+	background: rgb(30, 30, 46);
+	margin: 1;
+	scrollbar-size: 0 0;
 }
