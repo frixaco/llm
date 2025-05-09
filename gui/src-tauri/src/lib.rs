@@ -1,10 +1,11 @@
 use std::env;
 
+use futures::StreamExt;
 use git2::Repository;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tauri::ipc::Channel;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn get_project_dir(path: Option<String>) -> String {
     let target_path = match path {
@@ -35,6 +36,26 @@ fn get_project_dir(path: Option<String>) -> String {
     }
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase", tag = "event", content = "data")]
+enum StreamEvent {
+    #[serde(rename_all = "camelCase")]
+    Started {
+        prompt: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Delta {
+        content: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Finished {
+        full_response: Option<String>,
+    },
+    Error {
+        message: String,
+    },
+}
+
 #[derive(Debug, Deserialize)]
 struct ChatCompletionResponse {
     id: String,
@@ -43,8 +64,16 @@ struct ChatCompletionResponse {
 
 #[derive(Debug, Deserialize)]
 struct Choice {
-    message: Message,
+    message: Option<Message>,
+    delta: Option<Delta>,
     finish_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Delta {
+    role: String,
+    content: Option<String>,
+    tool_calls: Option<Vec<ToolCall>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,24 +97,67 @@ struct FunctionCall {
     arguments: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct Usage {
+    include: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Role {
+    System,
+    User,
+    Assistant,
+    Tool,
+    Developer,
+}
+
+#[derive(Serialize)]
+struct ChatMessage<'a> {
+    role: &'a Role,
+    content: &'a str,
+}
+
+#[derive(Serialize)]
+struct ChatCompletionRequest<'a> {
+    model: &'a str,
+    messages: &'a [ChatMessage<'a>],
+    stream: bool,
+    // usage: Option<Usage>,
+    // temperature:
+}
+
 const OPENROUTER_CHAT_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 
 #[tauri::command]
-async fn call_llm(prompt: String) -> Result<String, String> {
+async fn call_llm(prompt: String, on_event: Channel<StreamEvent>) -> Result<(), String> {
+    on_event
+        .send(StreamEvent::Started {
+            prompt: prompt.clone(),
+        })
+        .unwrap();
+
     let client = reqwest::Client::new();
 
-    let system_prompt = json!({
-    "role": "system",
-        "content": "You are an assistant at Senior Software Engineer level"
-    });
+    let system_prompt = ChatMessage {
+        role: &Role::System,
+        content: "You are a Senior Software Engineer with extensive knowledge in many programming languages, frameworks, libraries, design patterns and best practices."
+    };
 
-    let user_prompt = json!({"role": "user", "content": prompt});
+    let user_prompt = ChatMessage {
+        role: &Role::User,
+        content: &prompt,
+    };
 
+    // "model": "qwen/qwen3-235b-a22b:nitro",
+    // "model": "openai/gpt-4o-2024-11-20"),
+    // "model": "openai/gpt-4.1-mini"),
+    // "model": "google/gemini-2.5-pro-preview-05-06"),
+    // "model": "anthropic/claude-3.7-sonnet"),
     let payload = json!({
-        // "model" : "google/gemini-2.5-pro-preview-03-25",
-        // "model": "openai/gpt-4.1-mini",
-        "model": "google/gemini-2.5-flash-preview",
-        "messages": [system_prompt, user_prompt]
+        "model": "google/gemini-2.5-flash-preview:nitro",
+        "messages": [system_prompt, user_prompt],
+        "stream": true,
     });
 
     let openrouter_api_key: String = env::var("OPENROUTER_API_KEY").unwrap_or("".to_string());
@@ -99,19 +171,66 @@ async fn call_llm(prompt: String) -> Result<String, String> {
         .await
         .map_err(|err| format!("Request error: {}", err))?;
 
-    let body: ChatCompletionResponse = res
-        .json()
-        .await
-        .map_err(|err| format!("Response error: {}", err))?;
+    let mut stream = res.bytes_stream();
 
-    let content = &body
-        .choices
-        .into_iter()
-        .next()
-        .and_then(|choice| choice.message.content)
-        .ok_or("No content in response")?;
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(bytes) => {
+                let chunk = String::from_utf8_lossy(&bytes);
+                for line in chunk.lines() {
+                    if let Some(json_str) = line.strip_prefix("data: ") {
+                        if json_str == "[DONE]" {
+                            println!("DONE");
+                            on_event
+                                .send(StreamEvent::Finished {
+                                    full_response: Some("done".to_string()),
+                                })
+                                .unwrap();
+                            break;
+                        }
 
-    Ok(content.to_string())
+                        match serde_json::from_str::<ChatCompletionResponse>(json_str) {
+                            Ok(msg) => {
+                                let choice = &msg.choices[0];
+                                if let Some(delta) = &choice.delta {
+                                    if let Some(text) = &delta.content {
+                                        on_event
+                                            .send(StreamEvent::Delta {
+                                                content: text.clone(),
+                                            })
+                                            .unwrap();
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("{}", e)
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("stream error: {}", e);
+                break;
+            }
+        }
+    }
+
+    Ok(())
+
+    // let body: ChatCompletionResponse = res
+    //     .json()
+    //     .await
+    //     .map_err(|err| format!("Response error: {}", err))?;
+    //
+    // let content = &body
+    //     .choices
+    //     .into_iter()
+    //     .next()
+    //     .and_then(|choice| choice.message.content)
+    //     .ok_or("No content in response")?;
+    //
+    // Ok(content.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

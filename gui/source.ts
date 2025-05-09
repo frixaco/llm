@@ -6,6 +6,7 @@ import { createInterface } from "node:readline/promises";
 import os from "os";
 import chalk from "chalk";
 
+// TODO: FORCE USE TOOLS VIA @EDIT/UPDATE FILE instead of this
 const getSystemPrompt =
   () => `You are extremely smart coding assistant with extensive knowledge in many programming languages, frameworks, design patterns and best practices.
 
@@ -119,8 +120,8 @@ async function runAgent(messages: CoreMessage[]): Promise<CoreMessage[]> {
     toolCallStreaming: true,
     maxSteps: 25,
     temperature: 0,
-    // model: openrouter.chat("qwen/qwen3-235b-a22b"),
-    model: openrouter.chat("google/gemini-2.5-flash-preview"),
+    model: openrouter.chat("qwen/qwen3-235b-a22b"),
+    // model: openrouter.chat("google/gemini-2.5-flash-preview"),
     // model: openrouter.chat("openai/gpt-4o-2024-11-20"),
     // model: openrouter.chat("openai/gpt-4.1-mini"),
     // model: openrouter.chat("google/gemini-2.5-pro-preview-03-25"),
