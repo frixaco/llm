@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "process:default",
     "fs:default",
     "core:window:default",
     "core:window:allow-start-dragging",
@@ -36,8 +37,7 @@
           "path": "**/target/**"
         }
       ]
-    },
-    "process:default"
+    }
   ]
 }
 

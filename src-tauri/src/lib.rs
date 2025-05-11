@@ -272,6 +272,7 @@ Phase 2 – call tools if they are needed to accomplish given task; otherwise om
             Ok(bytes) => {
                 let chunk = String::from_utf8_lossy(&bytes);
                 for line in chunk.lines() {
+                    println!("msg: {:?}", &line);
                     if let Some(json_str) = line.strip_prefix("data: ") {
                         if json_str == "[DONE]" {
                             println!("DONE");
@@ -295,7 +296,6 @@ Phase 2 – call tools if they are needed to accomplish given task; otherwise om
                                             })
                                             .unwrap();
                                     }
-                                    println!("{:?}", delta);
                                     if delta.content.is_none() && delta.tool_calls.is_some() {
                                         println!("TOOL CALL BOOM!!!!");
                                         if let Some(tool_calls) = &delta.tool_calls {

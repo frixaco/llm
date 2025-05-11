@@ -1,5 +1,5 @@
 [package]
-name = "gui"
+name = "aitetsu"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "gui_lib"
+name = "aitetsu_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -22,11 +22,12 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-fs = "2"
 tauri-plugin-process = "2"
-git2 = "0.20.1"
+tauri-plugin-fs = "2"
+git2 = "0.20.2"
 reqwest = { version = "0.12.15", features = ["json", "stream"] }
-tokio = { version = "1.44.2", features = ["full"] }
+tokio = { version = "1.45.0", features = ["full"] }
 futures = "0.3.31"
 nucleo-matcher = "0.3.1"
-walkdir = "2"
+walkdir = "2.5.0"
+
