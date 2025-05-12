@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import reactLogo from "./assets/react.svg";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
 import { exit } from "@tauri-apps/plugin-process";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Channel, invoke } from "@tauri-apps/api/core";
 // import markdownit from 'markdown-it'
 import { marked } from "marked";
+
+const SYSTEM_PROMPT: string = `You are a Senior Software Engineer with extensive knowledge in many programming languages, frameworks, libraries, design patterns and best practices.
+
+Answer in two phases.
+Phase 1 – present the solution and a detailed plan.
+Phase 2 – call tools if they are needed to accomplish given task; otherwise omit Phase 2.
+`;
 
 type StreamEvent =
   | {
@@ -31,24 +38,28 @@ type StreamEvent =
 function App() {
   // ── state ────────────────────────────────────────────────────────────
   const [history, setHistory] = useState<string[]>([]);
+  const [last, setLast] = useState<string | null>(null);
+  const [toolActive, setToolActive] = useState(false);
+  const [activeTool, setActiveTool] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [fileDirPicker, setFileDirPicker] = useState(false);
   const [fileDirResults, setFileDirResults] = useState<string[]>([]);
   const [searchPath, setSearchPath] = useState("");
+  const [cwd, setCwd] = useState<string | null>(null);
 
   // ── refs ─────────────────────────────────────────────────────────────
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── derived / memoised helpers ───────────────────────────────────────
-  const updateHistory = useCallback(
-    (updater: (prev: string[]) => string[]) =>
-      setHistory((prev) =>
-        updater(typeof updater === "function" ? prev : prev),
-      ),
-    [],
-  );
+  useEffect(() => {
+    (async () => {
+      if (!generating && last) {
+        const markdownResponse = await marked.parse(last!);
+        setLast(markdownResponse);
+      }
+    })();
+  }, [last]);
 
   // ── side-effect: update searchPath when typing after “@” ─────────────
   useEffect(() => {
@@ -100,6 +111,15 @@ function App() {
       ) {
         await exit(1);
       }
+
+      // CMD + O  (change to taste)
+      if (e.metaKey && e.key === "o") {
+        const cwd = await open({ directory: true, multiple: false });
+        if (cwd !== null) setCwd(cwd as string);
+        await invoke("set_project_dir", {
+          path: cwd,
+        });
+      }
     };
     document.addEventListener("keypress", handler);
     return () => document.removeEventListener("keypress", handler);
@@ -132,32 +152,43 @@ function App() {
       const userPrompt = prompt.trim();
       if (userPrompt === "") return;
 
-      updateHistory((prev) => [...prev, userPrompt]);
+      setHistory((prev) => [...prev, userPrompt]);
       setGenerating(true);
       setPrompt("");
 
       const onEvent = new Channel<StreamEvent>();
       onEvent.onmessage = async (message) => {
-        const h = [...history]; // snapshot
-        const last = h.pop() ?? "";
         if (message.event === "started") {
-          setHistory([...h, ""]);
+          setLast("");
         }
         if (message.event === "delta") {
-          if (!message.data.content && message.data.tool_calls) {
-            setHistory([...h, last + " TOOL CALLING"]);
+          if (message.data.content == null && message.data.tool_calls != null) {
+            setToolActive(true);
+            setActiveTool(message.data.tool_calls[0]);
+            console.log("TOOL CALL STARTED: ", message.data.tool_calls[0]);
           }
           if (message.data.content && !message.data.tool_calls) {
-            setHistory([...h, last + message.data.content]);
+            setLast((p) => p! + message.data.content);
+          }
+          if (message.data.content != null && message.data.tool_calls != null) {
+            setToolActive(false);
+            setActiveTool(null);
+            console.log("TOOL CALL ENDED");
           }
         }
         if (message.event === "finished") {
-          const markdownResponse = await marked.parse(last);
-          setHistory([...h, markdownResponse]);
+          setHistory((p) => [...p, last!]);
+          setLast(null);
         }
       };
 
-      await invoke("call_llm", { prompt: userPrompt, onEvent });
+      await invoke("call_llm", {
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+        onEvent,
+      });
       setGenerating(false);
     }
   };
@@ -169,9 +200,9 @@ function App() {
         data-tauri-drag-region
         className="h-7 w-full px-2 cursor-pointer py-1 select-none border-b border-b-ctp-mauve flex items-center justify-between"
       >
-        <p className="text-sm font-mono font-semibold tracking-wider">
+        <div className="w-1/3">
           {history.length !== 0 && (
-            <>
+            <p className="text-sm font-mono font-semibold tracking-wider">
               <span className="text-ctp-pink">a</span>
               <span className="text-ctp-green">i</span>
               <span className="text-ctp-yellow">t</span>
@@ -179,11 +210,15 @@ function App() {
               <span className="text-ctp-sky">t</span>
               <span className="text-ctp-blue">s</span>
               <span className="text-ctp-peach">u</span>
-            </>
+            </p>
           )}
-        </p>
+        </div>
 
-        <div className="flex gap-3 text-xs font-mono font-sm">
+        <div className="text-ctp-blue whitespace-nowrap w-1/3 text-center overflow-clip">
+          <span>{cwd ?? "-"}</span>
+        </div>
+
+        <div className="w-1/3 justify-end items-center flex gap-3 text-xs font-mono font-sm">
           <span className="text-ctp-text">1000 / 200,000</span>
           <span className="text-ctp-mauve">|</span>
           <span className="text-ctp-maroon">$ 0.23</span>
@@ -205,23 +240,35 @@ function App() {
             </p>
           </div>
         ) : (
-          history.map((item, i) => (
-            <div
-              key={i}
-              data-index={i}
-              className="border flex rounded border-ctp-surface0 px-2 py-1"
-            >
+          <>
+            {history.map((item, i) => (
+              <div
+                key={i}
+                className="border flex rounded border-ctp-surface0 px-2 py-1"
+              >
+                <div
+                  className="prose !max-w-none prose-sm leading-tight prose-headings:text-ctp-pink prose-strong:text-ctp-mauve prose-em:text-ctp-maroon prose-a:text-ctp-blue hover:prose-a:text-ctp-teal prose-code:text-ctp-peach prose-pre:bg-ctp-surface0 prose-pre:text-ctp-text prose-p:text-ctp-subtext1 prose-ul:text-ctp-subtext0 prose-ol:list-inside"
+                  dangerouslySetInnerHTML={{ __html: item }}
+                />
+                {generating && (
+                  <span className="inline-block w-[1ch] bg-ctp-surface0">
+                    &nbsp;
+                  </span>
+                )}
+              </div>
+            ))}
+            <div className="border flex rounded border-ctp-surface0 px-2 py-1">
               <div
                 className="prose !max-w-none prose-sm leading-tight prose-headings:text-ctp-pink prose-strong:text-ctp-mauve prose-em:text-ctp-maroon prose-a:text-ctp-blue hover:prose-a:text-ctp-teal prose-code:text-ctp-peach prose-pre:bg-ctp-surface0 prose-pre:text-ctp-text prose-p:text-ctp-subtext1 prose-ul:text-ctp-subtext0 prose-ol:list-inside"
-                dangerouslySetInnerHTML={{ __html: item }}
+                dangerouslySetInnerHTML={{ __html: last ?? "" }}
               />
-              {generating && (
-                <span className="inline-block w-[1ch] bg-ctp-surface0">
-                  &nbsp;
+              {toolActive && activeTool && (
+                <span className="text-ctp-green text-xl py-2 px-1">
+                  {activeTool}
                 </span>
               )}
             </div>
-          ))
+          </>
         )}
       </div>
 
