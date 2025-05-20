@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::PathBuf;
 use std::{env, sync::Mutex};
 
@@ -65,13 +66,14 @@ fn is_ignored(entry: &DirEntry) -> bool {
 }
 
 #[tauri::command]
-fn fuzzy_search(search_term: String) -> Vec<String> {
+fn fuzzy_search(search_term: String, state: State<'_, Mutex<AppData>>) -> Vec<String> {
     println!("search term: {}", search_term);
 
-    let cwd = get_project_dir(None);
-    println!("cwd: {}", cwd);
+    let cwd = &state.lock().unwrap().project_dir;
+    // let cwd = get_project_dir(None);
+    // println!("cwd: {}", state.project_dir);
 
-    let paths: Vec<String> = WalkDir::new(&cwd)
+    let paths: Vec<String> = WalkDir::new(cwd)
         .into_iter()
         .filter_entry(is_ignored)
         .filter_map(|e| e.ok())
@@ -113,6 +115,7 @@ enum StreamEvent {
     Started {},
     #[serde(rename_all = "camelCase")]
     Delta {
+        role: Role,
         content: Option<String>,
         tool_calls: Option<Vec<String>>,
     },
@@ -123,6 +126,11 @@ enum StreamEvent {
     Error {
         message: String,
     },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct ReadFileToolArgs {
+    path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -217,20 +225,13 @@ const OPENROUTER_CHAT_URL: &str = "https://openrouter.ai/api/v1/chat/completions
 async fn run_chat_completion(
     messages: &mut Vec<ChatMessage>,
     on_event: &Channel<StreamEvent>,
+    cwd: String,
 ) -> Result<(), String> {
-    // let pending_tool_calls = []
-    // loop {
-    //      send (latest) messages to LLM
-    //      if need tool_call
-    //      pending_tool_calls.push(tool_call_info)
-    //
-    //      for each tool_call in pending_tool_calls:
-    //          complete tool call
-    //          add result to messages
-    // }
-
     let client = reqwest::Client::new();
-    let openrouter_api_key: String = env::var("OPENROUTER_API_KEY").unwrap_or("".to_string());
+    let openrouter_api_key: String = match env::var("OPENROUTER_API_KEY") {
+        Ok(env) => env,
+        Err(e) => return Err(e.to_string()),
+    };
 
     let mut pending_tool_calls: Vec<ToolCall> = vec![];
 
@@ -301,6 +302,7 @@ async fn run_chat_completion(
                                             assistant_response.push_str(text);
                                             on_event
                                                 .send(StreamEvent::Delta {
+                                                    role: Role::Assistant,
                                                     content: Some(text.clone()),
                                                     tool_calls: None,
                                                 })
@@ -360,6 +362,7 @@ async fn run_chat_completion(
 
                 on_event
                     .send(StreamEvent::Delta {
+                        role: Role::Tool,
                         content: None,
                         tool_calls: Some(vec![tool_name.to_string()]),
                     })
@@ -376,8 +379,17 @@ async fn run_chat_completion(
                 };
 
                 if tool_name == "read_file" {
+                    let args = match serde_json::from_str::<ReadFileToolArgs>(&tool_args) {
+                        Ok(a) => a,
+                        Err(e) => ReadFileToolArgs {
+                            path: e.to_string(),
+                        },
+                    };
+
+                    let content = read_file(&cwd, args);
+
                     tool_message.content = serde_json::to_string(&json!({
-                        "textContent": "import React from \"react\"\n\nconsole.log(\"hello world\")"
+                        "textContent": content
                     }))
                     .unwrap();
                     println!("FINISHED READING");
@@ -385,6 +397,7 @@ async fn run_chat_completion(
 
                 on_event
                     .send(StreamEvent::Delta {
+                        role: Role::Tool,
                         content: None,
                         tool_calls: None,
                     })
@@ -403,14 +416,24 @@ async fn run_chat_completion(
     Ok(())
 }
 
+fn read_file(cwd: &String, args: ReadFileToolArgs) -> Result<String, String> {
+    match fs::read_to_string(format!("{}/{}", cwd, args.path)) {
+        Ok(v) => Ok(v),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 #[tauri::command]
 async fn call_llm(
     mut messages: Vec<ChatMessage>,
     on_event: Channel<StreamEvent>,
+    state: State<'_, Mutex<AppData>>,
 ) -> Result<(), String> {
     on_event.send(StreamEvent::Started {}).unwrap();
 
-    let result = run_chat_completion(&mut messages, &on_event).await;
+    let cwd = state.lock().unwrap().project_dir.clone();
+
+    let result = run_chat_completion(&mut messages, &on_event, cwd).await;
 
     on_event
         .send(StreamEvent::Finished {
